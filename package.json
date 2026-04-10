@@ -1,0 +1,10 @@
+{
+  "name": "x402-erc7710",
+  "private": true,
+  "scripts": {
+    "dev:server": "pnpm --filter @x402-erc7710/server dev",
+    "dev:frontend": "pnpm --filter @x402-erc7710/frontend dev",
+    "dev": "pnpm run dev:server & pnpm run dev:frontend",
+    "build": "pnpm -r build"
+  }
+}
