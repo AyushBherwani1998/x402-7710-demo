@@ -118,7 +118,7 @@ function validatePayment(
     return `Unsupported scheme: ${paymentPayload.accepted.scheme}. Expected exact`;
   }
   if (paymentPayload.accepted.network !== paymentRequirements.network) {
-    return `Unsupported network: ${paymentPayload.accepted.network}. Expected ${NETWORK_ID}`;
+    return `Unsupported network: ${paymentPayload.accepted.network}. Expected ${paymentRequirements.network}`;
   }
   if (!isERC7710Payload(paymentPayload.payload)) {
     return "Invalid payload: missing delegationManager, permissionContext, or delegator";
@@ -153,33 +153,17 @@ export async function verify(
   const payTo = getAddress(paymentRequirements.payTo);
   const amount = BigInt(paymentRequirements.amount);
 
-  // Check delegator balance first
-  try {
-    const balance = await publicClient.readContract({
+  const executionCallData = buildExecutionCallData(erc20Address, payTo, amount);
+
+  // Run balance check and simulation in parallel
+  const [balanceResult, simulationResult] = await Promise.allSettled([
+    publicClient.readContract({
       address: erc20Address,
       abi: erc20Abi,
       functionName: "balanceOf",
       args: [delegator],
-    });
-
-    if (balance < amount) {
-      return {
-        isValid: false,
-        invalidReason: "INSUFFICIENT_FUNDS",
-        invalidMessage: `Delegator balance ${balance} < required ${amount}`,
-        payer: delegator,
-      };
-    }
-  } catch {
-    // If balance check fails, continue with simulation
-  }
-
-  // Build execution calldata
-  const executionCallData = buildExecutionCallData(erc20Address, payTo, amount);
-
-  // Simulate redeemDelegations
-  try {
-    await publicClient.simulateContract({
+    }),
+    publicClient.simulateContract({
       address: delegationManager,
       abi: delegationManagerAbi,
       functionName: "redeemDelegations",
@@ -189,12 +173,24 @@ export async function verify(
         [executionCallData],
       ],
       account: facilitatorAccount,
-    });
+    }),
+  ]);
 
-    return { isValid: true, payer: delegator };
-  } catch (error: unknown) {
+  // Check balance first (cheaper / clearer error)
+  if (balanceResult.status === "fulfilled" && balanceResult.value < amount) {
+    return {
+      isValid: false,
+      invalidReason: "INSUFFICIENT_FUNDS",
+      invalidMessage: `Delegator balance ${balanceResult.value} < required ${amount}`,
+      payer: delegator,
+    };
+  }
+
+  if (simulationResult.status === "rejected") {
     const message =
-      error instanceof Error ? error.message : "Simulation failed";
+      simulationResult.reason instanceof Error
+        ? simulationResult.reason.message
+        : "Simulation failed";
     return {
       isValid: false,
       invalidReason: "SIMULATION_FAILED",
@@ -202,6 +198,8 @@ export async function verify(
       payer: delegator,
     };
   }
+
+  return { isValid: true, payer: delegator };
 }
 
 // ─── Settle ─────────────────────────────────────────────────────────────────

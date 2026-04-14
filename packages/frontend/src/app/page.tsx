@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { type Address, type Hex } from "viem";
+import { type Address } from "viem";
 import { useAccount } from "wagmi";
 import { ConnectWallet } from "@/components/ConnectWallet";
-import { GrantPermission } from "@/components/GrantPermission";
+import { GrantPermission, type PermissionData } from "@/components/GrantPermission";
 import { ResourceAccess } from "@/components/ResourceAccess";
 import { fetchServerInfo } from "@/lib/x402";
 import { Separator } from "@/components/ui/separator";
@@ -15,14 +15,7 @@ export default function Home() {
     null
   );
   const [payToAddress, setPayToAddress] = useState<Address | null>(null);
-  const [delegationData, setDelegationData] = useState<{
-    permissionContext: Hex;
-    delegationManager: Address;
-    delegator: Address;
-    maxAmount?: string;
-    facilitator?: Address;
-    grantedAt?: string;
-  } | null>(null);
+  const [delegationData, setDelegationData] = useState<PermissionData | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
 
   // Restore delegation data from localStorage when address changes
@@ -57,14 +50,7 @@ export default function Home() {
   }, []);
 
   const handlePermissionGranted = useCallback(
-    (data: {
-      permissionContext: Hex;
-      delegationManager: Address;
-      delegator: Address;
-      maxAmount?: string;
-      facilitator?: Address;
-      grantedAt?: string;
-    }) => {
+    (data: PermissionData) => {
       setDelegationData(data);
       if (address) {
         localStorage.setItem(
@@ -121,6 +107,7 @@ export default function Home() {
           {isConnected && address && (
             <GrantPermission
               facilitatorAddress={facilitatorAddress}
+              payToAddress={payToAddress}
               onPermissionGranted={handlePermissionGranted}
               onPermissionRevoked={handlePermissionRevoked}
               permissionData={delegationData}

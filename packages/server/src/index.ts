@@ -1,84 +1,19 @@
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
-import { verify, settle, type PaymentPayload, type PaymentRequirements } from "./erc7710.js";
-import { createPaymentMiddleware } from "./middleware.js";
+import { createPaymentMiddleware, getFacilitatorAddress } from "./middleware.js";
 import { generateTradingSignal, isSupportedToken, SUPPORTED_TOKENS } from "./signals.js";
 import {
   PORT,
   NETWORK_ID,
   USDC_ADDRESS,
-  facilitatorAccount,
   PAY_TO_ADDRESS,
+  FACILITATOR_URL,
 } from "./config.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
-
-// ─── Facilitator endpoints ───────────────────────────────────────────────────
-
-app.post("/facilitator/verify", async (req, res) => {
-  try {
-    const { paymentPayload, paymentRequirements } = req.body as {
-      paymentPayload: PaymentPayload;
-      paymentRequirements: PaymentRequirements;
-    };
-
-    if (!paymentPayload || !paymentRequirements) {
-      res
-        .status(400)
-        .json({ error: "Missing paymentPayload or paymentRequirements" });
-      return;
-    }
-
-    const result = await verify(paymentPayload, paymentRequirements);
-    console.log(result);
-    res.json(result);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    res.status(500).json({ error: message });
-  }
-});
-
-app.post("/facilitator/settle", async (req, res) => {
-  try {
-    const { paymentPayload, paymentRequirements } = req.body as {
-      paymentPayload: PaymentPayload;
-      paymentRequirements: PaymentRequirements;
-    };
-
-    if (!paymentPayload || !paymentRequirements) {
-      res
-        .status(400)
-        .json({ error: "Missing paymentPayload or paymentRequirements" });
-      return;
-    }
-
-    const result = await settle(paymentPayload, paymentRequirements);
-    res.json(result);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    res.status(500).json({ error: message });
-  }
-});
-
-app.get("/facilitator/supported", (_req, res) => {
-  res.json({
-    supported: [
-      {
-        scheme: "exact",
-        network: NETWORK_ID,
-        asset: USDC_ADDRESS,
-        extra: {
-          assetTransferMethod: "erc7710",
-          facilitators: [facilitatorAccount.address],
-        },
-      },
-    ],
-    facilitatorAddress: facilitatorAccount.address,
-  });
-});
 
 // ─── Protected resource ──────────────────────────────────────────────────────
 
@@ -108,21 +43,33 @@ app.get("/api/premium-data", premiumPaymentMiddleware, async (req, res) => {
 
 // ─── Info endpoint for frontend discovery ────────────────────────────────────
 
-app.get("/info", (_req, res) => {
-  res.json({
-    facilitatorAddress: facilitatorAccount.address,
-    payToAddress: PAY_TO_ADDRESS,
-    network: NETWORK_ID,
-    asset: USDC_ADDRESS,
-    supportedMethods: ["erc7710"],
-  });
+app.get("/info", async (_req, res) => {
+  try {
+    const facilitatorAddress = await getFacilitatorAddress();
+    res.json({
+      facilitatorAddress,
+      payToAddress: PAY_TO_ADDRESS,
+      network: NETWORK_ID,
+      asset: USDC_ADDRESS,
+      supportedMethods: ["erc7710"],
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Facilitator unavailable";
+    res.status(503).json({ error: message });
+  }
 });
 
 // ─── Start ───────────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
-  console.log(`[x402-erc7710] Facilitator server running on http://localhost:${PORT}`);
-  console.log(`[x402-erc7710] Facilitator address: ${facilitatorAccount.address}`);
-  console.log(`[x402-erc7710] Pay-to address: ${PAY_TO_ADDRESS}`);
-  console.log(`[x402-erc7710] Network: ${NETWORK_ID}`);
+app.listen(PORT, async () => {
+  console.log(`[seller] Server running on http://localhost:${PORT}`);
+  console.log(`[seller] Pay-to address: ${PAY_TO_ADDRESS}`);
+  console.log(`[seller] Facilitator URL: ${FACILITATOR_URL}`);
+  console.log(`[seller] Network: ${NETWORK_ID}`);
+  try {
+    const addr = await getFacilitatorAddress();
+    console.log(`[seller] Facilitator address: ${addr}`);
+  } catch (err) {
+    console.warn(`[seller] Could not reach facilitator at startup — will retry on first request`);
+  }
 });

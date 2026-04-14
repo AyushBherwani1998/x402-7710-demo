@@ -4,7 +4,8 @@ import { useState, useCallback } from "react";
 import { type Address, type Hex } from "viem";
 import { useWalletClient, useChainId, useSwitchChain } from "wagmi";
 import { baseSepolia } from "wagmi/chains";
-import { grantPermission } from "@/lib/delegation";
+import { grantPermission, redelegateToFacilitator } from "@/lib/delegation";
+import { getOrCreateEmbeddedAccount } from "@/lib/embedded-account";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,7 +17,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-interface PermissionData {
+export interface PermissionData {
   permissionContext: Hex;
   delegationManager: Address;
   delegator: Address;
@@ -27,6 +28,7 @@ interface PermissionData {
 
 interface GrantPermissionProps {
   facilitatorAddress: Address | null;
+  payToAddress: Address | null;
   onPermissionGranted: (data: PermissionData) => void;
   onPermissionRevoked: () => void;
   permissionData: PermissionData | null;
@@ -35,6 +37,7 @@ interface GrantPermissionProps {
 
 export function GrantPermission({
   facilitatorAddress,
+  payToAddress,
   onPermissionGranted,
   onPermissionRevoked,
   permissionData,
@@ -49,34 +52,58 @@ export function GrantPermission({
   const [error, setError] = useState<string | null>(null);
 
   const handleGrantPermission = useCallback(async () => {
-    if (!walletClient || !facilitatorAddress) return;
+    if (!walletClient || !facilitatorAddress || !payToAddress) return;
     setIsGranting(true);
     setError(null);
 
     try {
+      // Step 1: Get or create the embedded EOA for this user
+      const { account: embeddedAccount, privateKey: embeddedPrivateKey } =
+        getOrCreateEmbeddedAccount(delegator);
+
+      // Step 2: Grant ERC-7715 permission from MetaMask → embedded EOA
       const result = await grantPermission({
         walletClient,
-        facilitatorAddress,
+        embeddedEOAAddress: embeddedAccount.address,
         delegator,
         maxAmount,
       });
 
+      // Step 3: Redelegate from embedded EOA → facilitator with caveats
+      const redelegatedContext = await redelegateToFacilitator({
+        permissionContext: result.permissionContext,
+        delegationManager: result.delegationManager,
+        embeddedEOAPrivateKey: embeddedPrivateKey,
+        embeddedEOAAddress: embeddedAccount.address,
+        facilitatorAddress,
+        payToAddress,
+      });
+
       onPermissionGranted({
-        ...result,
+        permissionContext: redelegatedContext,
+        delegationManager: result.delegationManager,
+        delegator: result.delegator,
         maxAmount,
         facilitator: facilitatorAddress,
         grantedAt: new Date().toISOString(),
       });
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to grant permission"
-      );
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === "object" && err !== null && "message" in err
+            ? String((err as { message: unknown }).message)
+            : typeof err === "string"
+              ? err
+              : "Failed to grant permission";
+      setError(message);
     } finally {
       setIsGranting(false);
     }
   }, [
     walletClient,
     facilitatorAddress,
+    payToAddress,
     delegator,
     maxAmount,
     onPermissionGranted,
@@ -97,8 +124,7 @@ export function GrantPermission({
         </CardTitle>
         {!permissionData && (
           <CardDescription>
-            Authorize the facilitator to transfer USDC on your behalf using
-            ERC-7715 permissions
+            Allow automatic USDC payments for premium content access
           </CardDescription>
         )}
       </CardHeader>
@@ -145,21 +171,6 @@ export function GrantPermission({
               />
             </div>
 
-            {facilitatorAddress ? (
-              <div className="rounded-lg border bg-secondary/50 p-3">
-                <p className="mb-1 text-xs font-medium text-muted-foreground">
-                  Granting to (Facilitator)
-                </p>
-                <p className="truncate font-mono text-xs">
-                  {facilitatorAddress}
-                </p>
-              </div>
-            ) : (
-              <p className="text-sm text-warning">
-                Loading facilitator address...
-              </p>
-            )}
-
             {isWrongChain ? (
               <Button
                 onClick={() =>
@@ -184,7 +195,7 @@ export function GrantPermission({
             ) : (
               <Button
                 onClick={handleGrantPermission}
-                disabled={isGranting || !facilitatorAddress || !walletClient}
+                disabled={isGranting || !facilitatorAddress || !payToAddress || !walletClient}
                 size="lg"
                 className="w-full"
               >

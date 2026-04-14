@@ -2,9 +2,10 @@
   "name": "x402-erc7710",
   "private": true,
   "scripts": {
+    "dev:facilitator": "pnpm --filter @x402-erc7710/facilitator dev",
     "dev:server": "pnpm --filter @x402-erc7710/server dev",
     "dev:frontend": "pnpm --filter @x402-erc7710/frontend dev",
-    "dev": "pnpm run dev:server & pnpm run dev:frontend",
+    "dev": "pnpm run dev:facilitator & pnpm run dev:server & pnpm run dev:frontend",
     "build": "pnpm -r build"
   }
 }
