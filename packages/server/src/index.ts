@@ -34,6 +34,7 @@ const premiumPaymentMiddleware = createPaymentMiddleware({
   amount: "10000", // 0.01 USDC (6 decimals)
   description: "Access to premium market data",
   mimeType: "application/json",
+  getFacilitatorAddress: () => facilitatorAddress,
 });
 
 app.get("/api/premium-data", premiumPaymentMiddleware, async (req, res) => {

@@ -1,13 +1,15 @@
 import { erc7715ProviderActions } from "@metamask/smart-accounts-kit/actions";
 import {
   getSmartAccountsEnvironment,
-  signDelegation
+  signDelegation,
+  ANY_BENEFICIARY,
 } from "@metamask/smart-accounts-kit";
 import {
   decodeDelegations,
   encodeDelegations,
   toDelegation,
   hashDelegation,
+  createCaveatBuilder,
 } from "@metamask/smart-accounts-kit/utils";
 import {
   parseUnits,
@@ -68,10 +70,8 @@ export async function grantPermission(params: {
 }
 
 /**
- * Step 2: Redelegate from embedded EOA to facilitator — no extra caveats needed
- * because the root delegation from MetaMask already enforces token, method, and
- * spending limit. TX Sentinel uses batch execution mode which is incompatible
- * with the allowedCalldata caveat enforcer (CALLTYPE_SINGLE only).
+ * Step 2: Open-redelegate from embedded EOA to ANY_BENEFICIARY, restricted
+ * by a single redeemer caveat so only the facilitator can redeem it.
  */
 export async function redelegateToFacilitator(params: {
   permissionContext: Hex;
@@ -88,32 +88,31 @@ export async function redelegateToFacilitator(params: {
     facilitatorAddress,
   } = params;
 
-  // Decode the original delegation chain from MetaMask
+  const environment = getSmartAccountsEnvironment(base.id);
   const originalDelegations = decodeDelegations(permissionContext);
   const rootDelegation = originalDelegations[0];
 
+  const caveats = createCaveatBuilder(environment)
+    .addCaveat("redeemer", { redeemers: [facilitatorAddress] })
+    .build();
+
   const redelegation = toDelegation({
-    caveats: [],
-    delegate: facilitatorAddress,
+    caveats,
+    delegate: ANY_BENEFICIARY,
     delegator: embeddedEOAAddress,
     authority: hashDelegation(rootDelegation),
     salt: BigInt(0),
-    signature: "0x00"
-  })
+    signature: "0x00",
+  });
 
-
-  // Sign the redelegation with the embedded EOA's private key
   const signature = await signDelegation({
     privateKey: embeddedEOAPrivateKey,
     delegation: redelegation,
     delegationManager,
     chainId: base.id,
-    allowInsecureUnrestrictedDelegation: true,
   });
 
   const signedRedelegation = { ...redelegation, signature };
 
-  // Encode the full delegation chain: [redelegation, ...original delegations]
   return encodeDelegations([signedRedelegation, ...originalDelegations]);
 }
-

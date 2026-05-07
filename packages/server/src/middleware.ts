@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import type { Address } from "viem";
 import {
   USDC_ADDRESS,
   NETWORK_ID,
@@ -11,6 +12,7 @@ export interface PaymentMiddlewareOptions {
   amount: string;
   description?: string;
   mimeType?: string;
+  getFacilitatorAddress?: () => Address | null;
 }
 
 async function verifyPayment(
@@ -47,6 +49,7 @@ async function settlePayment(
 
 export function createPaymentMiddleware(options: PaymentMiddlewareOptions) {
   return async (req: Request, res: Response, next: NextFunction) => {
+    const facilitatorAddress = options.getFacilitatorAddress?.();
     const paymentRequirements: PaymentRequirements = {
       scheme: "exact",
       network: NETWORK_ID,
@@ -56,6 +59,7 @@ export function createPaymentMiddleware(options: PaymentMiddlewareOptions) {
       maxTimeoutSeconds: 60,
       extra: {
         assetTransferMethod: "erc7710",
+        ...(facilitatorAddress ? { facilitators: [facilitatorAddress] } : {}),
       },
     };
 
