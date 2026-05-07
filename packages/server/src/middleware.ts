@@ -5,7 +5,7 @@ import {
   PAY_TO_ADDRESS,
   FACILITATOR_URL,
 } from "./config.js";
-import type { FacilitatorInfo, PaymentPayload, PaymentRequirements, VerifyResult, SettleResult } from "./types.js";
+import type { PaymentPayload, PaymentRequirements, VerifyResult, SettleResult } from "./types.js";
 
 export interface PaymentMiddlewareOptions {
   amount: string;
@@ -13,19 +13,11 @@ export interface PaymentMiddlewareOptions {
   mimeType?: string;
 }
 
-async function fetchFacilitatorInfo(): Promise<FacilitatorInfo> {
-  const res = await fetch(`${FACILITATOR_URL}/supported`);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch facilitator info: ${res.status}`);
-  }
-  return res.json();
-}
-
 async function verifyPayment(
   paymentPayload: PaymentPayload,
   paymentRequirements: PaymentRequirements
 ): Promise<VerifyResult> {
-  const res = await fetch(`${FACILITATOR_URL}/verify`, {
+  const res = await fetch(`${FACILITATOR_URL}/platform/v2/x402/verify`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ paymentPayload, paymentRequirements }),
@@ -41,7 +33,7 @@ async function settlePayment(
   paymentPayload: PaymentPayload,
   paymentRequirements: PaymentRequirements
 ): Promise<SettleResult> {
-  const res = await fetch(`${FACILITATOR_URL}/settle`, {
+  const res = await fetch(`${FACILITATOR_URL}/platform/v2/x402/settle`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ paymentPayload, paymentRequirements }),
@@ -53,32 +45,8 @@ async function settlePayment(
   return res.json();
 }
 
-// Cache facilitator address with a 5-minute TTL
-let cachedFacilitatorAddress: string | null = null;
-let cacheTimestamp = 0;
-const CACHE_TTL_MS = 5 * 60 * 1000;
-
-export async function getFacilitatorAddress(): Promise<string> {
-  if (cachedFacilitatorAddress && Date.now() - cacheTimestamp < CACHE_TTL_MS) {
-    return cachedFacilitatorAddress;
-  }
-  const info = await fetchFacilitatorInfo();
-  cachedFacilitatorAddress = info.facilitatorAddress;
-  cacheTimestamp = Date.now();
-  return cachedFacilitatorAddress;
-}
-
 export function createPaymentMiddleware(options: PaymentMiddlewareOptions) {
   return async (req: Request, res: Response, next: NextFunction) => {
-    let facilitatorAddress: string;
-    try {
-      facilitatorAddress = await getFacilitatorAddress();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Facilitator unavailable";
-      res.status(503).json({ error: message });
-      return;
-    }
-
     const paymentRequirements: PaymentRequirements = {
       scheme: "exact",
       network: NETWORK_ID,
@@ -88,7 +56,6 @@ export function createPaymentMiddleware(options: PaymentMiddlewareOptions) {
       maxTimeoutSeconds: 60,
       extra: {
         assetTransferMethod: "erc7710",
-        facilitators: [facilitatorAddress],
       },
     };
 
@@ -100,7 +67,6 @@ export function createPaymentMiddleware(options: PaymentMiddlewareOptions) {
       const paymentRequired = {
         x402Version: 2,
         accepts: [paymentRequirements],
-        facilitatorAddress,
         description: options.description || "Payment required to access this resource",
         mimeType: options.mimeType || "application/json",
       };

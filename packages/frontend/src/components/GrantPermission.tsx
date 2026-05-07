@@ -3,8 +3,8 @@
 import { useState, useCallback } from "react";
 import { type Address, type Hex } from "viem";
 import { useWalletClient, useChainId, useSwitchChain } from "wagmi";
-import { baseSepolia } from "wagmi/chains";
-import { grantPermission, redelegateToFacilitator } from "@/lib/delegation";
+import { base } from "wagmi/chains";
+import { grantPermission } from "@/lib/delegation";
 import { getOrCreateEmbeddedAccount } from "@/lib/embedded-account";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,7 +27,6 @@ export interface PermissionData {
 }
 
 interface GrantPermissionProps {
-  facilitatorAddress: Address | null;
   payToAddress: Address | null;
   onPermissionGranted: (data: PermissionData) => void;
   onPermissionRevoked: () => void;
@@ -36,7 +35,6 @@ interface GrantPermissionProps {
 }
 
 export function GrantPermission({
-  facilitatorAddress,
   payToAddress,
   onPermissionGranted,
   onPermissionRevoked,
@@ -46,13 +44,13 @@ export function GrantPermission({
   const { data: walletClient } = useWalletClient();
   const chainId = useChainId();
   const { switchChain } = useSwitchChain();
-  const isWrongChain = chainId !== baseSepolia.id;
+  const isWrongChain = chainId !== base.id;
   const [maxAmount, setMaxAmount] = useState("10");
   const [isGranting, setIsGranting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleGrantPermission = useCallback(async () => {
-    if (!walletClient || !facilitatorAddress || !payToAddress) return;
+    if (!walletClient || !payToAddress) return;
     setIsGranting(true);
     setError(null);
 
@@ -69,22 +67,11 @@ export function GrantPermission({
         maxAmount,
       });
 
-      // Step 3: Redelegate from embedded EOA → facilitator with caveats
-      const redelegatedContext = await redelegateToFacilitator({
-        permissionContext: result.permissionContext,
-        delegationManager: result.delegationManager,
-        embeddedEOAPrivateKey: embeddedPrivateKey,
-        embeddedEOAAddress: embeddedAccount.address,
-        facilitatorAddress,
-        payToAddress,
-      });
-
       onPermissionGranted({
-        permissionContext: redelegatedContext,
+        permissionContext: result.permissionContext,
         delegationManager: result.delegationManager,
         delegator: result.delegator,
         maxAmount,
-        facilitator: facilitatorAddress,
         grantedAt: new Date().toISOString(),
       });
     } catch (err: unknown) {
@@ -100,14 +87,7 @@ export function GrantPermission({
     } finally {
       setIsGranting(false);
     }
-  }, [
-    walletClient,
-    facilitatorAddress,
-    payToAddress,
-    delegator,
-    maxAmount,
-    onPermissionGranted,
-  ]);
+  }, [walletClient, payToAddress, delegator, maxAmount, onPermissionGranted]);
 
   if (!delegator) return null;
 
@@ -175,13 +155,13 @@ export function GrantPermission({
               <Button
                 onClick={() =>
                   switchChain({
-                    chainId: baseSepolia.id,
+                    chainId: base.id,
                     addEthereumChainParameter: {
-                      chainName: baseSepolia.name,
-                      nativeCurrency: baseSepolia.nativeCurrency,
-                      rpcUrls: [baseSepolia.rpcUrls.default.http[0]],
+                      chainName: base.name,
+                      nativeCurrency: base.nativeCurrency,
+                      rpcUrls: [base.rpcUrls.default.http[0]],
                       blockExplorerUrls: [
-                        baseSepolia.blockExplorers.default.url,
+                        base.blockExplorers.default.url,
                       ],
                     },
                   })
@@ -190,12 +170,12 @@ export function GrantPermission({
                 size="lg"
                 className="w-full"
               >
-                Switch to Base Sepolia
+                Switch to Base
               </Button>
             ) : (
               <Button
                 onClick={handleGrantPermission}
-                disabled={isGranting || !facilitatorAddress || !payToAddress || !walletClient}
+                disabled={isGranting || !payToAddress || !walletClient}
                 size="lg"
                 className="w-full"
               >

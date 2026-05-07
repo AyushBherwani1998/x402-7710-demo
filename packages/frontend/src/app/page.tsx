@@ -11,10 +11,8 @@ import { Separator } from "@/components/ui/separator";
 
 export default function Home() {
   const { isConnected, address } = useAccount();
-  const [facilitatorAddress, setFacilitatorAddress] = useState<Address | null>(
-    null
-  );
   const [payToAddress, setPayToAddress] = useState<Address | null>(null);
+  const [facilitatorAddress, setFacilitatorAddress] = useState<Address | null>(null);
   const [delegationData, setDelegationData] = useState<PermissionData | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -39,8 +37,8 @@ export default function Home() {
   useEffect(() => {
     fetchServerInfo()
       .then((info) => {
-        setFacilitatorAddress(info.facilitatorAddress);
         setPayToAddress(info.payToAddress);
+        setFacilitatorAddress(info.facilitatorAddress);
       })
       .catch((err) => {
         setServerError(
@@ -106,7 +104,6 @@ export default function Home() {
 
           {isConnected && address && (
             <GrantPermission
-              facilitatorAddress={facilitatorAddress}
               payToAddress={payToAddress}
               onPermissionGranted={handlePermissionGranted}
               onPermissionRevoked={handlePermissionRevoked}
@@ -119,6 +116,7 @@ export default function Home() {
             <ResourceAccess
               delegationData={delegationData}
               payToAddress={payToAddress}
+              facilitatorAddress={facilitatorAddress}
             />
           )}
         </div>

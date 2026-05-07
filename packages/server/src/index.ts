@@ -1,7 +1,8 @@
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
-import { createPaymentMiddleware, getFacilitatorAddress } from "./middleware.js";
+import { type Address } from "viem";
+import { createPaymentMiddleware } from "./middleware.js";
 import { generateTradingSignal, isSupportedToken, SUPPORTED_TOKENS } from "./signals.js";
 import {
   PORT,
@@ -14,6 +15,18 @@ import {
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
+
+let facilitatorAddress: Address | null = null;
+
+async function fetchFacilitatorAddress(): Promise<Address> {
+  const res = await fetch(`${FACILITATOR_URL}/platform/v2/x402/supported`);
+  if (!res.ok) throw new Error("Failed to fetch facilitator supported info");
+  const data = await res.json();
+  const signers: Address[] | undefined =
+    data.signers?.[NETWORK_ID] ?? data.signers?.["eip155:*"];
+  if (signers && signers.length > 0) return signers[0];
+  throw new Error("Facilitator address not found in /supported response");
+}
 
 // ─── Protected resource ──────────────────────────────────────────────────────
 
@@ -43,33 +56,32 @@ app.get("/api/premium-data", premiumPaymentMiddleware, async (req, res) => {
 
 // ─── Info endpoint for frontend discovery ────────────────────────────────────
 
-app.get("/info", async (_req, res) => {
-  try {
-    const facilitatorAddress = await getFacilitatorAddress();
-    res.json({
-      facilitatorAddress,
-      payToAddress: PAY_TO_ADDRESS,
-      network: NETWORK_ID,
-      asset: USDC_ADDRESS,
-      supportedMethods: ["erc7710"],
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Facilitator unavailable";
-    res.status(503).json({ error: message });
-  }
+app.get("/info", (_req, res) => {
+  res.json({
+    payToAddress: PAY_TO_ADDRESS,
+    facilitatorAddress,
+    network: NETWORK_ID,
+    asset: USDC_ADDRESS,
+    supportedMethods: ["erc7710"],
+  });
 });
 
 // ─── Start ───────────────────────────────────────────────────────────────────
 
-app.listen(PORT, async () => {
-  console.log(`[seller] Server running on http://localhost:${PORT}`);
-  console.log(`[seller] Pay-to address: ${PAY_TO_ADDRESS}`);
-  console.log(`[seller] Facilitator URL: ${FACILITATOR_URL}`);
-  console.log(`[seller] Network: ${NETWORK_ID}`);
+async function start() {
   try {
-    const addr = await getFacilitatorAddress();
-    console.log(`[seller] Facilitator address: ${addr}`);
+    facilitatorAddress = await fetchFacilitatorAddress();
+    console.log(`[seller] Facilitator address: ${facilitatorAddress}`);
   } catch (err) {
-    console.warn(`[seller] Could not reach facilitator at startup — will retry on first request`);
+    console.warn(`[seller] Could not fetch facilitator address: ${err instanceof Error ? err.message : err}`);
   }
-});
+
+  app.listen(PORT, () => {
+    console.log(`[seller] Server running on http://localhost:${PORT}`);
+    console.log(`[seller] Pay-to address: ${PAY_TO_ADDRESS}`);
+    console.log(`[seller] Facilitator URL: ${FACILITATOR_URL}`);
+    console.log(`[seller] Network: ${NETWORK_ID}`);
+  });
+}
+
+start();

@@ -7,6 +7,8 @@ import {
   encodePaymentHeader,
   fetchProtectedResource,
 } from "@/lib/x402";
+import { redelegateToFacilitator } from "@/lib/delegation";
+import { getOrCreateEmbeddedAccount } from "@/lib/embedded-account";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -60,6 +62,7 @@ interface ResourceAccessProps {
     delegator: Address;
   } | null;
   payToAddress: Address | null;
+  facilitatorAddress: Address | null;
 }
 
 function IndicatorCard({
@@ -113,6 +116,7 @@ function Spinner() {
 export function ResourceAccess({
   delegationData,
   payToAddress,
+  facilitatorAddress,
 }: ResourceAccessProps) {
   const [selectedToken, setSelectedToken] = useState<SupportedToken>("ETH");
   const [isLoading, setIsLoading] = useState(false);
@@ -121,17 +125,28 @@ export function ResourceAccess({
 
   const handleAccess = useCallback(
     async (coin: SupportedToken) => {
-      if (!delegationData || !payToAddress) return;
+      if (!delegationData || !payToAddress || !facilitatorAddress) return;
       setIsLoading(true);
       setError(null);
       setResult(null);
 
       try {
+        const { account: embeddedAccount, privateKey: embeddedPrivateKey } =
+          getOrCreateEmbeddedAccount(delegationData.delegator);
+
+        const permissionContext = await redelegateToFacilitator({
+          permissionContext: delegationData.permissionContext,
+          delegationManager: delegationData.delegationManager,
+          embeddedEOAPrivateKey: embeddedPrivateKey,
+          embeddedEOAAddress: embeddedAccount.address,
+          facilitatorAddress,
+        });
+
         const payload = buildPaymentPayload({
           amount: "10000",
           payTo: payToAddress,
           delegationManager: delegationData.delegationManager,
-          permissionContext: delegationData.permissionContext,
+          permissionContext,
           delegator: delegationData.delegator,
         });
 
@@ -146,7 +161,7 @@ export function ResourceAccess({
         setIsLoading(false);
       }
     },
-    [delegationData, payToAddress]
+    [delegationData, payToAddress, facilitatorAddress]
   );
 
   if (!delegationData) return null;

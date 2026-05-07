@@ -4,6 +4,7 @@ import { USDC_ADDRESS } from "./delegation";
 const SERVER_URL =
   process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:4402";
 
+
 export interface PaymentPayload {
   x402Version: number;
   accepted: {
@@ -35,7 +36,7 @@ export function buildPaymentPayload(params: {
     x402Version: 2,
     accepted: {
       scheme: "exact",
-      network: "eip155:84532",
+      network: "eip155:8453",
       amount: params.amount,
       asset: USDC_ADDRESS,
       payTo: params.payTo,
@@ -86,8 +87,8 @@ export async function fetchProtectedResource(
 }
 
 export async function fetchServerInfo(): Promise<{
-  facilitatorAddress: Address;
   payToAddress: Address;
+  facilitatorAddress: Address;
   network: string;
   asset: Address;
 }> {

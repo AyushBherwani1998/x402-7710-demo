@@ -1,27 +1,24 @@
 import { erc7715ProviderActions } from "@metamask/smart-accounts-kit/actions";
 import {
   getSmartAccountsEnvironment,
-  signDelegation,
+  signDelegation
 } from "@metamask/smart-accounts-kit";
 import {
   decodeDelegations,
   encodeDelegations,
-  createCaveatBuilder,
   toDelegation,
   hashDelegation,
 } from "@metamask/smart-accounts-kit/utils";
 import {
   parseUnits,
-  encodeAbiParameters,
-  toFunctionSelector,
   type Hex,
   type Address,
   type WalletClient,
 } from "viem";
-import { baseSepolia } from "viem/chains";
+import { base } from "viem/chains";
 
 export const USDC_ADDRESS: Address =
-  "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+  "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
 /**
  * Step 1: Grant ERC-7715 permission from MetaMask user to the embedded EOA.
@@ -44,7 +41,7 @@ export async function grantPermission(params: {
 
   const permissions = await client.requestExecutionPermissions([
     {
-      chainId: baseSepolia.id,
+      chainId: base.id,
       expiry,
       to: embeddedEOAAddress,
       permission: {
@@ -61,7 +58,7 @@ export async function grantPermission(params: {
   ]);
 
   const permission = permissions[0];
-  const env = getSmartAccountsEnvironment(baseSepolia.id);
+  const env = getSmartAccountsEnvironment(base.id);
 
   return {
     permissionContext: permission.context as Hex,
@@ -71,12 +68,10 @@ export async function grantPermission(params: {
 }
 
 /**
- * Step 2: Redelegate from embedded EOA to the facilitator with caveats.
- *
- * Adds:
- *  - redeemer: only the facilitator can redeem
- *  - allowedCalldata: enforces the PAY_TO address as the transfer recipient
- *    (checks bytes 4–35 of calldata, skipping the function selector)
+ * Step 2: Redelegate from embedded EOA to facilitator — no extra caveats needed
+ * because the root delegation from MetaMask already enforces token, method, and
+ * spending limit. TX Sentinel uses batch execution mode which is incompatible
+ * with the allowedCalldata caveat enforcer (CALLTYPE_SINGLE only).
  */
 export async function redelegateToFacilitator(params: {
   permissionContext: Hex;
@@ -84,7 +79,6 @@ export async function redelegateToFacilitator(params: {
   embeddedEOAPrivateKey: Hex;
   embeddedEOAAddress: Address;
   facilitatorAddress: Address;
-  payToAddress: Address;
 }): Promise<Hex> {
   const {
     permissionContext,
@@ -92,35 +86,19 @@ export async function redelegateToFacilitator(params: {
     embeddedEOAPrivateKey,
     embeddedEOAAddress,
     facilitatorAddress,
-    payToAddress,
   } = params;
-
-  const env = getSmartAccountsEnvironment(baseSepolia.id);
 
   // Decode the original delegation chain from MetaMask
   const originalDelegations = decodeDelegations(permissionContext);
   const rootDelegation = originalDelegations[0];
 
-  // Encode the PAY_TO address for the calldata check (enforce transfer recipient)
-  const encodedPayTo = encodeAbiParameters(
-    [{ type: "address" }],
-    [payToAddress],
-  );
-
-  // Build caveats for the redelegation
-  const caveats = createCaveatBuilder(env)
-    .addCaveat("redeemer", { redeemers: [facilitatorAddress] })
-    .addCaveat("allowedCalldata", { startIndex: 4, value: encodedPayTo });
-
-
-  // Create the redelegation: embedded EOA → facilitator
   const redelegation = toDelegation({
-    caveats: caveats.build(),
+    caveats: [],
     delegate: facilitatorAddress,
     delegator: embeddedEOAAddress,
     authority: hashDelegation(rootDelegation),
     salt: BigInt(0),
-    signature: "0x00",
+    signature: "0x00"
   })
 
 
@@ -129,7 +107,8 @@ export async function redelegateToFacilitator(params: {
     privateKey: embeddedEOAPrivateKey,
     delegation: redelegation,
     delegationManager,
-    chainId: baseSepolia.id,
+    chainId: base.id,
+    allowInsecureUnrestrictedDelegation: true,
   });
 
   const signedRedelegation = { ...redelegation, signature };

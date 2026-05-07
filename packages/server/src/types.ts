@@ -30,7 +30,6 @@ export interface PaymentRequirements {
   maxTimeoutSeconds: number;
   extra: {
     assetTransferMethod: string;
-    facilitators?: string[];
     [key: string]: unknown;
   };
 }
@@ -49,17 +48,4 @@ export interface SettleResult {
   errorReason?: string;
   errorMessage?: string;
   payer?: Address;
-}
-
-export interface FacilitatorInfo {
-  supported: Array<{
-    scheme: string;
-    network: string;
-    asset: string;
-    extra: {
-      assetTransferMethod: string;
-      facilitators: string[];
-    };
-  }>;
-  facilitatorAddress: string;
 }
