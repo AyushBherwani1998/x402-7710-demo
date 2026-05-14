@@ -97,7 +97,7 @@ export async function redelegateToFacilitator(params: {
     .build();
 
   const redelegation = toDelegation({
-    caveats,
+    caveats: [],
     delegate: ANY_BENEFICIARY,
     delegator: embeddedEOAAddress,
     authority: hashDelegation(rootDelegation),
@@ -110,6 +110,7 @@ export async function redelegateToFacilitator(params: {
     delegation: redelegation,
     delegationManager,
     chainId: base.id,
+    allowInsecureUnrestrictedDelegation: true,
   });
 
   const signedRedelegation = { ...redelegation, signature };
