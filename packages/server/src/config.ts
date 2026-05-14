@@ -12,6 +12,7 @@ if (!PAY_TO_ADDRESS) {
 }
 
 export const FACILITATOR_URL =
-  process.env.FACILITATOR_URL || "https://tx-sentinel-base-mainnet.dev-api.cx.metamask.io";
+  process.env.FACILITATOR_URL ||
+  "https://tx-sentinel-base-mainnet.dev-api.cx.metamask.io/platform/v2/x402";
 
 export const PORT = parseInt(process.env.PORT || "4402", 10);

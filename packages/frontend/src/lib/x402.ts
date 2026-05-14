@@ -1,23 +1,21 @@
 import type { Address, Hex } from "viem";
-import { USDC_ADDRESS } from "./delegation";
 
 const SERVER_URL =
   process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:4402";
 
+export interface PaymentRequirements {
+  scheme: string;
+  network: string;
+  amount: string;
+  asset: Address;
+  payTo: Address;
+  maxTimeoutSeconds: number;
+  extra: Record<string, unknown>;
+}
 
 export interface PaymentPayload {
   x402Version: number;
-  accepted: {
-    scheme: string;
-    network: string;
-    amount: string;
-    asset: Address;
-    payTo: Address;
-    maxTimeoutSeconds: number;
-    extra: {
-      assetTransferMethod: string;
-    };
-  };
+  accepted: PaymentRequirements;
   payload: {
     delegationManager: Address;
     permissionContext: Hex;
@@ -26,25 +24,14 @@ export interface PaymentPayload {
 }
 
 export function buildPaymentPayload(params: {
-  amount: string;
-  payTo: Address;
+  accepted: PaymentRequirements;
   delegationManager: Address;
   permissionContext: Hex;
   delegator: Address;
 }): PaymentPayload {
   return {
     x402Version: 2,
-    accepted: {
-      scheme: "exact",
-      network: "eip155:8453",
-      amount: params.amount,
-      asset: USDC_ADDRESS,
-      payTo: params.payTo,
-      maxTimeoutSeconds: 60,
-      extra: {
-        assetTransferMethod: "erc7710",
-      },
-    },
+    accepted: params.accepted,
     payload: {
       delegationManager: params.delegationManager,
       permissionContext: params.permissionContext,
@@ -86,15 +73,39 @@ export async function fetchProtectedResource(
   return { data, paymentResponse };
 }
 
-export async function fetchServerInfo(): Promise<{
+export interface PaymentInfo {
   payToAddress: Address;
-  facilitatorAddress: Address;
-  network: string;
-  asset: Address;
-}> {
-  const res = await fetch(`${SERVER_URL}/info`);
-  if (!res.ok) {
-    throw new Error("Failed to fetch server info");
+  facilitators: Address[];
+  accepted: PaymentRequirements;
+}
+
+export async function fetchPaymentRequirements(): Promise<PaymentInfo> {
+  const res = await fetch(`${SERVER_URL}/api/premium-data`);
+  if (res.status !== 402) {
+    throw new Error(`Expected 402 response, got ${res.status}`);
   }
-  return res.json();
+
+  const header = res.headers.get("payment-required");
+  if (!header) {
+    throw new Error("Missing PAYMENT-REQUIRED header");
+  }
+
+  const paymentRequired = JSON.parse(atob(header));
+  const accepted = paymentRequired.accepts?.[0] as
+    | PaymentRequirements
+    | undefined;
+  if (!accepted) {
+    throw new Error("No payment requirements in 402 response");
+  }
+
+  const facilitators = (accepted.extra?.facilitators ?? []) as Address[];
+  if (facilitators.length === 0) {
+    throw new Error("No facilitator addresses in payment requirements");
+  }
+
+  return {
+    payToAddress: accepted.payTo,
+    facilitators,
+    accepted,
+  };
 }

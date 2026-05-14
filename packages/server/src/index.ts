@@ -1,43 +1,45 @@
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
-import { type Address } from "viem";
-import { createPaymentMiddleware } from "./middleware.js";
+import { paymentMiddleware } from "@x402/express";
+import { x402ResourceServer, HTTPFacilitatorClient } from "@x402/core/server";
+import { Erc7710EvmScheme } from "./scheme.js";
 import { generateTradingSignal, isSupportedToken, SUPPORTED_TOKENS } from "./signals.js";
-import {
-  PORT,
+import { PORT, NETWORK_ID, PAY_TO_ADDRESS, FACILITATOR_URL } from "./config.js";
+
+const facilitatorClient = new HTTPFacilitatorClient({ url: FACILITATOR_URL });
+const resourceServer = new x402ResourceServer(facilitatorClient).register(
   NETWORK_ID,
-  USDC_ADDRESS,
-  PAY_TO_ADDRESS,
-  FACILITATOR_URL,
-} from "./config.js";
+  new Erc7710EvmScheme(facilitatorClient),
+);
 
 const app = express();
-app.use(cors());
+app.use(cors({ exposedHeaders: ["PAYMENT-REQUIRED", "PAYMENT-RESPONSE"] }));
 app.use(express.json({ limit: "1mb" }));
 
-let facilitatorAddress: Address | null = null;
-
-async function fetchFacilitatorAddress(): Promise<Address> {
-  const res = await fetch(`${FACILITATOR_URL}/platform/v2/x402/supported`);
-  if (!res.ok) throw new Error("Failed to fetch facilitator supported info");
-  const data = await res.json();
-  const signers: Address[] | undefined =
-    data.signers?.[NETWORK_ID] ?? data.signers?.["eip155:*"];
-  if (signers && signers.length > 0) return signers[0];
-  throw new Error("Facilitator address not found in /supported response");
-}
+app.use(
+  paymentMiddleware(
+    {
+      "GET /api/premium-data": {
+        accepts: [
+          {
+            scheme: "exact",
+            price: "$0.01",
+            network: NETWORK_ID,
+            payTo: PAY_TO_ADDRESS,
+          },
+        ],
+        description: "Access to premium market data",
+        mimeType: "application/json",
+      },
+    },
+    resourceServer,
+  ),
+);
 
 // ─── Protected resource ──────────────────────────────────────────────────────
 
-const premiumPaymentMiddleware = createPaymentMiddleware({
-  amount: "10000", // 0.01 USDC (6 decimals)
-  description: "Access to premium market data",
-  mimeType: "application/json",
-  getFacilitatorAddress: () => facilitatorAddress,
-});
-
-app.get("/api/premium-data", premiumPaymentMiddleware, async (req, res) => {
+app.get("/api/premium-data", async (req, res) => {
   try {
     const coin = ((req.query.coin as string) || "ETH").toUpperCase();
     if (!isSupportedToken(coin)) {
@@ -55,34 +57,11 @@ app.get("/api/premium-data", premiumPaymentMiddleware, async (req, res) => {
   }
 });
 
-// ─── Info endpoint for frontend discovery ────────────────────────────────────
-
-app.get("/info", (_req, res) => {
-  res.json({
-    payToAddress: PAY_TO_ADDRESS,
-    facilitatorAddress,
-    network: NETWORK_ID,
-    asset: USDC_ADDRESS,
-    supportedMethods: ["erc7710"],
-  });
-});
-
 // ─── Start ───────────────────────────────────────────────────────────────────
 
-async function start() {
-  try {
-    facilitatorAddress = await fetchFacilitatorAddress();
-    console.log(`[seller] Facilitator address: ${facilitatorAddress}`);
-  } catch (err) {
-    console.warn(`[seller] Could not fetch facilitator address: ${err instanceof Error ? err.message : err}`);
-  }
-
-  app.listen(PORT, () => {
-    console.log(`[seller] Server running on http://localhost:${PORT}`);
-    console.log(`[seller] Pay-to address: ${PAY_TO_ADDRESS}`);
-    console.log(`[seller] Facilitator URL: ${FACILITATOR_URL}`);
-    console.log(`[seller] Network: ${NETWORK_ID}`);
-  });
-}
-
-start();
+app.listen(PORT, () => {
+  console.log(`[seller] Server running on http://localhost:${PORT}`);
+  console.log(`[seller] Pay-to address: ${PAY_TO_ADDRESS}`);
+  console.log(`[seller] Facilitator URL: ${FACILITATOR_URL}`);
+  console.log(`[seller] Network: ${NETWORK_ID}`);
+});

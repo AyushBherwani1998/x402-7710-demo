@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",
-    "@metamask/smart-accounts-kit": "latest",
+    "@metamask/smart-accounts-kit": "^1.5.0",
     "@tanstack/react-query": "^5.75.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

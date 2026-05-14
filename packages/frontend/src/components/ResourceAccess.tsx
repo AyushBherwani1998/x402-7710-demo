@@ -6,6 +6,7 @@ import {
   buildPaymentPayload,
   encodePaymentHeader,
   fetchProtectedResource,
+  type PaymentRequirements,
 } from "@/lib/x402";
 import { redelegateToFacilitator } from "@/lib/delegation";
 import { getOrCreateEmbeddedAccount } from "@/lib/embedded-account";
@@ -61,8 +62,8 @@ interface ResourceAccessProps {
     delegationManager: Address;
     delegator: Address;
   } | null;
-  payToAddress: Address | null;
-  facilitatorAddress: Address | null;
+  accepted: PaymentRequirements;
+  facilitators: Address[];
 }
 
 function IndicatorCard({
@@ -115,8 +116,8 @@ function Spinner() {
 
 export function ResourceAccess({
   delegationData,
-  payToAddress,
-  facilitatorAddress,
+  accepted,
+  facilitators,
 }: ResourceAccessProps) {
   const [selectedToken, setSelectedToken] = useState<SupportedToken>("ETH");
   const [isLoading, setIsLoading] = useState(false);
@@ -125,7 +126,7 @@ export function ResourceAccess({
 
   const handleAccess = useCallback(
     async (coin: SupportedToken) => {
-      if (!delegationData || !payToAddress || !facilitatorAddress) return;
+      if (!delegationData || facilitators.length === 0) return;
       setIsLoading(true);
       setError(null);
       setResult(null);
@@ -139,16 +140,18 @@ export function ResourceAccess({
           delegationManager: delegationData.delegationManager,
           embeddedEOAPrivateKey: embeddedPrivateKey,
           embeddedEOAAddress: embeddedAccount.address,
-          facilitatorAddress,
+          facilitatorAddress: facilitators[0],
         });
 
         const payload = buildPaymentPayload({
-          amount: "10000",
-          payTo: payToAddress,
+          accepted,
           delegationManager: delegationData.delegationManager,
           permissionContext,
           delegator: delegationData.delegator,
         });
+
+        console.log("[x402] Payment payload delegator:", delegationData.delegator);
+        console.log("[x402] Payment payload:", JSON.stringify(payload, null, 2));
 
         const header = encodePaymentHeader(payload);
         const response = await fetchProtectedResource(header, coin);
@@ -161,7 +164,7 @@ export function ResourceAccess({
         setIsLoading(false);
       }
     },
-    [delegationData, payToAddress, facilitatorAddress]
+    [delegationData, accepted, facilitators]
   );
 
   if (!delegationData) return null;

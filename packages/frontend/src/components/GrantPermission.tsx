@@ -17,17 +17,16 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
 export interface PermissionData {
   permissionContext: Hex;
   delegationManager: Address;
   delegator: Address;
   maxAmount?: string;
-  facilitator?: Address;
   grantedAt?: string;
 }
 
 interface GrantPermissionProps {
-  payToAddress: Address | null;
   onPermissionGranted: (data: PermissionData) => void;
   onPermissionRevoked: () => void;
   permissionData: PermissionData | null;
@@ -35,7 +34,6 @@ interface GrantPermissionProps {
 }
 
 export function GrantPermission({
-  payToAddress,
   onPermissionGranted,
   onPermissionRevoked,
   permissionData,
@@ -50,16 +48,14 @@ export function GrantPermission({
   const [error, setError] = useState<string | null>(null);
 
   const handleGrantPermission = useCallback(async () => {
-    if (!walletClient || !payToAddress) return;
+    if (!walletClient) return;
     setIsGranting(true);
     setError(null);
 
     try {
-      // Step 1: Get or create the embedded EOA for this user
-      const { account: embeddedAccount, privateKey: embeddedPrivateKey } =
+      const { account: embeddedAccount } =
         getOrCreateEmbeddedAccount(delegator);
 
-      // Step 2: Grant ERC-7715 permission from MetaMask → embedded EOA
       const result = await grantPermission({
         walletClient,
         embeddedEOAAddress: embeddedAccount.address,
@@ -87,7 +83,7 @@ export function GrantPermission({
     } finally {
       setIsGranting(false);
     }
-  }, [walletClient, payToAddress, delegator, maxAmount, onPermissionGranted]);
+  }, [walletClient, delegator, maxAmount, onPermissionGranted]);
 
   if (!delegator) return null;
 
@@ -160,9 +156,7 @@ export function GrantPermission({
                       chainName: base.name,
                       nativeCurrency: base.nativeCurrency,
                       rpcUrls: [base.rpcUrls.default.http[0]],
-                      blockExplorerUrls: [
-                        base.blockExplorers.default.url,
-                      ],
+                      blockExplorerUrls: [base.blockExplorers.default.url],
                     },
                   })
                 }
@@ -175,7 +169,7 @@ export function GrantPermission({
             ) : (
               <Button
                 onClick={handleGrantPermission}
-                disabled={isGranting || !payToAddress || !walletClient}
+                disabled={isGranting || !walletClient}
                 size="lg"
                 className="w-full"
               >
@@ -185,9 +179,7 @@ export function GrantPermission({
           </div>
         )}
 
-        {error && (
-          <p className="mt-3 text-sm text-destructive">{error}</p>
-        )}
+        {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
       </CardContent>
     </Card>
   );

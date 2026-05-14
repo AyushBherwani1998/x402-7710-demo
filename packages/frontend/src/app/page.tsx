@@ -4,16 +4,24 @@ import { useState, useEffect, useCallback } from "react";
 import { type Address } from "viem";
 import { useAccount } from "wagmi";
 import { ConnectWallet } from "@/components/ConnectWallet";
-import { GrantPermission, type PermissionData } from "@/components/GrantPermission";
+import {
+  GrantPermission,
+  type PermissionData,
+} from "@/components/GrantPermission";
 import { ResourceAccess } from "@/components/ResourceAccess";
-import { fetchServerInfo } from "@/lib/x402";
+import {
+  fetchPaymentRequirements,
+  type PaymentRequirements,
+} from "@/lib/x402";
 import { Separator } from "@/components/ui/separator";
 
 export default function Home() {
   const { isConnected, address } = useAccount();
-  const [payToAddress, setPayToAddress] = useState<Address | null>(null);
-  const [facilitatorAddress, setFacilitatorAddress] = useState<Address | null>(null);
-  const [delegationData, setDelegationData] = useState<PermissionData | null>(null);
+  const [facilitators, setFacilitators] = useState<Address[]>([]);
+  const [accepted, setAccepted] = useState<PaymentRequirements | null>(null);
+  const [delegationData, setDelegationData] = useState<PermissionData | null>(
+    null
+  );
   const [serverError, setServerError] = useState<string | null>(null);
 
   // Restore delegation data from localStorage when address changes
@@ -35,10 +43,10 @@ export default function Home() {
   }, [address]);
 
   useEffect(() => {
-    fetchServerInfo()
+    fetchPaymentRequirements()
       .then((info) => {
-        setPayToAddress(info.payToAddress);
-        setFacilitatorAddress(info.facilitatorAddress);
+        setFacilitators(info.facilitators);
+        setAccepted(info.accepted);
       })
       .catch((err) => {
         setServerError(
@@ -89,7 +97,8 @@ export default function Home() {
             Premium Trading Signals
           </h1>
           <p className="mt-3 text-muted-foreground">
-            Premium Hyperliquid signals. Pay via x402 + ERC-7710 + Advanced Permissions
+            Premium Hyperliquid signals. Pay via x402 + ERC-7710 + Advanced
+            Permissions
           </p>
         </div>
 
@@ -104,7 +113,6 @@ export default function Home() {
 
           {isConnected && address && (
             <GrantPermission
-              payToAddress={payToAddress}
               onPermissionGranted={handlePermissionGranted}
               onPermissionRevoked={handlePermissionRevoked}
               permissionData={delegationData}
@@ -112,11 +120,11 @@ export default function Home() {
             />
           )}
 
-          {isConnected && delegationData && (
+          {isConnected && delegationData && accepted && (
             <ResourceAccess
               delegationData={delegationData}
-              payToAddress={payToAddress}
-              facilitatorAddress={facilitatorAddress}
+              accepted={accepted}
+              facilitators={facilitators}
             />
           )}
         </div>
