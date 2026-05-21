@@ -1,16 +1,16 @@
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
-import { paymentMiddleware } from "@x402/express";
-import { x402ResourceServer, HTTPFacilitatorClient } from "@x402/core/server";
-import { Erc7710EvmScheme } from "./scheme.js";
+import { paymentMiddleware, x402ResourceServer } from "@x402/express";
+import { HTTPFacilitatorClient } from "@x402/core/server";
+import { x402ExactEvmErc7710ServerScheme } from "@metamask/x402";
 import { generateTradingSignal, isSupportedToken, SUPPORTED_TOKENS } from "./signals.js";
 import { PORT, NETWORK_ID, PAY_TO_ADDRESS, FACILITATOR_URL } from "./config.js";
 
 const facilitatorClient = new HTTPFacilitatorClient({ url: FACILITATOR_URL });
 const resourceServer = new x402ResourceServer(facilitatorClient).register(
   NETWORK_ID,
-  new Erc7710EvmScheme(facilitatorClient),
+  new x402ExactEvmErc7710ServerScheme(),
 );
 
 const app = express();
@@ -27,6 +27,9 @@ app.use(
             price: "$0.01",
             network: NETWORK_ID,
             payTo: PAY_TO_ADDRESS,
+            extra: {
+              assetTransferMethod: "erc7710",
+            },
           },
         ],
         description: "Access to premium market data",

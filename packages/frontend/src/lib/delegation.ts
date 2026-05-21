@@ -78,23 +78,16 @@ export async function redelegateToFacilitator(params: {
   delegationManager: Address;
   embeddedEOAPrivateKey: Hex;
   embeddedEOAAddress: Address;
-  facilitatorAddress: Address;
 }): Promise<Hex> {
   const {
     permissionContext,
     delegationManager,
     embeddedEOAPrivateKey,
     embeddedEOAAddress,
-    facilitatorAddress,
   } = params;
 
-  const environment = getSmartAccountsEnvironment(base.id);
   const originalDelegations = decodeDelegations(permissionContext);
   const rootDelegation = originalDelegations[0];
-
-  const caveats = createCaveatBuilder(environment)
-    .addCaveat("redeemer", { redeemers: [facilitatorAddress] })
-    .build();
 
   const redelegation = toDelegation({
     caveats: [],

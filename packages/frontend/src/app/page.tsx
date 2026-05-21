@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { type Address } from "viem";
 import { useAccount } from "wagmi";
 import { ConnectWallet } from "@/components/ConnectWallet";
 import {
@@ -9,20 +8,13 @@ import {
   type PermissionData,
 } from "@/components/GrantPermission";
 import { ResourceAccess } from "@/components/ResourceAccess";
-import {
-  fetchPaymentRequirements,
-  type PaymentRequirements,
-} from "@/lib/x402";
 import { Separator } from "@/components/ui/separator";
 
 export default function Home() {
   const { isConnected, address } = useAccount();
-  const [facilitators, setFacilitators] = useState<Address[]>([]);
-  const [accepted, setAccepted] = useState<PaymentRequirements | null>(null);
   const [delegationData, setDelegationData] = useState<PermissionData | null>(
     null
   );
-  const [serverError, setServerError] = useState<string | null>(null);
 
   // Restore delegation data from localStorage when address changes
   useEffect(() => {
@@ -41,19 +33,6 @@ export default function Home() {
       setDelegationData(null);
     }
   }, [address]);
-
-  useEffect(() => {
-    fetchPaymentRequirements()
-      .then((info) => {
-        setFacilitators(info.facilitators);
-        setAccepted(info.accepted);
-      })
-      .catch((err) => {
-        setServerError(
-          `Cannot reach server: ${err.message}. Make sure the server is running on ${process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:4402"}.`
-        );
-      });
-  }, []);
 
   const handlePermissionGranted = useCallback(
     (data: PermissionData) => {
@@ -102,12 +81,6 @@ export default function Home() {
           </p>
         </div>
 
-        {serverError && (
-          <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-            {serverError}
-          </div>
-        )}
-
         <div className="space-y-6">
           <ConnectWallet />
 
@@ -120,12 +93,8 @@ export default function Home() {
             />
           )}
 
-          {isConnected && delegationData && accepted && (
-            <ResourceAccess
-              delegationData={delegationData}
-              accepted={accepted}
-              facilitators={facilitators}
-            />
+          {isConnected && delegationData && (
+            <ResourceAccess delegationData={delegationData} />
           )}
         </div>
 

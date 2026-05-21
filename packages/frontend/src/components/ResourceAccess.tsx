@@ -1,15 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { type Address, type Hex } from "viem";
-import {
-  buildPaymentPayload,
-  encodePaymentHeader,
-  fetchProtectedResource,
-  type PaymentRequirements,
-} from "@/lib/x402";
-import { redelegateToFacilitator } from "@/lib/delegation";
-import { getOrCreateEmbeddedAccount } from "@/lib/embedded-account";
+import { createFetchWithPayment, getServerUrl } from "@/lib/x402";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -62,8 +55,6 @@ interface ResourceAccessProps {
     delegationManager: Address;
     delegator: Address;
   } | null;
-  accepted: PaymentRequirements;
-  facilitators: Address[];
 }
 
 function IndicatorCard({
@@ -116,47 +107,36 @@ function Spinner() {
 
 export function ResourceAccess({
   delegationData,
-  accepted,
-  facilitators,
 }: ResourceAccessProps) {
   const [selectedToken, setSelectedToken] = useState<SupportedToken>("ETH");
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<TradingSignal | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchWithPayment = useMemo(() => {
+    if (!delegationData) return null;
+    return createFetchWithPayment(delegationData);
+  }, [delegationData]);
+
   const handleAccess = useCallback(
     async (coin: SupportedToken) => {
-      if (!delegationData || facilitators.length === 0) return;
+      if (!fetchWithPayment) return;
       setIsLoading(true);
       setError(null);
       setResult(null);
 
       try {
-        const { account: embeddedAccount, privateKey: embeddedPrivateKey } =
-          getOrCreateEmbeddedAccount(delegationData.delegator);
+        const response = await fetchWithPayment(
+          `${getServerUrl()}/api/premium-data?coin=${coin}`
+        );
 
-        const permissionContext = await redelegateToFacilitator({
-          permissionContext: delegationData.permissionContext,
-          delegationManager: delegationData.delegationManager,
-          embeddedEOAPrivateKey: embeddedPrivateKey,
-          embeddedEOAAddress: embeddedAccount.address,
-          facilitatorAddress: facilitators[0],
-        });
+        if (!response.ok) {
+          const body = await response.json();
+          throw new Error(body.message || body.error || `HTTP ${response.status}`);
+        }
 
-        const payload = buildPaymentPayload({
-          accepted,
-          delegationManager: delegationData.delegationManager,
-          permissionContext,
-          delegator: delegationData.delegator,
-        });
-
-        console.log("[x402] Payment payload delegator:", delegationData.delegator);
-        console.log("[x402] Payment payload:", JSON.stringify(payload, null, 2));
-
-        const header = encodePaymentHeader(payload);
-        const response = await fetchProtectedResource(header, coin);
-        const raw = response.data as Record<string, unknown>;
-        const signal = (raw.data ?? raw) as TradingSignal;
+        const data = await response.json();
+        const signal = (data.data ?? data) as TradingSignal;
         setResult(signal);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Request failed");
@@ -164,7 +144,7 @@ export function ResourceAccess({
         setIsLoading(false);
       }
     },
-    [delegationData, accepted, facilitators]
+    [fetchWithPayment]
   );
 
   if (!delegationData) return null;
